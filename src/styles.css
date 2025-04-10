@@ -1,100 +1,46 @@
-/* src/styles.css */
 body {
   margin: 0;
-  font-family: sans-serif;
-  background-color: #222;
-  color: #eee;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  min-height: 100vh;
-  overflow: hidden;
+  background-color: black;
 }
 
-#root {
-  display: flex;
-  justify-content: center;
-  align-items: center;
+#game-container {
+  width: 800px;
+  height: 600px;
+  background-color: #111;
+  margin: 2em auto;
+  border: 2px solid white;
+  position: relative;
+}
+
+.game-canvas {
   width: 100%;
   height: 100%;
-}
-
-.game-container {
   position: relative;
-  background-color: #000;
-  border: 2px solid #fff;
-  overflow: hidden;
-  cursor: none; /* Hide cursor over game area */
+  background-color: #222;
 }
 
 .paddle {
+  width: 12px;
+  height: 100px;
+  background-color: lime;
   position: absolute;
-  background-color: #fff;
-  box-shadow: 0 0 5px #fff;
+  top: 250px;
+}
+
+.paddle.left {
+  left: 20px;
+}
+
+.paddle.right {
+  right: 20px;
 }
 
 .ball {
+  width: 20px;
+  height: 20px;
+  background-color: red;
   position: absolute;
-  background-color: #ffcc00;
+  top: 290px;
+  left: 390px;
   border-radius: 50%;
-  box-shadow: 0 0 8px #ffcc00;
-}
-
-.brick {
-  position: absolute;
-  background-color: #0099cc;
-  border: 1px solid #005588;
-  box-sizing: border-box;
-}
-
-.info-display {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  right: 10px;
-  display: flex;
-  justify-content: space-between;
-  color: #fff;
-  font-size: 1.2em;
-  pointer-events: none; /* Don't interfere with mouse */
-  z-index: 10; /* Ensure it's above game elements */
-  text-shadow: 1px 1px 2px #000;
-}
-
-.message-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.7);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  text-align: center;
-  z-index: 20;
-  color: white;
-}
-
-.message-overlay h2 {
-    font-size: 3em;
-    margin-bottom: 20px;
-     color: #0f0;
-     text-shadow: 2px 2px 5px #000;
-}
-
-.message-overlay button {
-    padding: 15px 30px;
-    font-size: 1.5em;
-    cursor: pointer;
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 5px;
-    transition: background-color 0.3s ease;
-}
-
-.message-overlay button:hover {
-    background-color: #45a049;
 }

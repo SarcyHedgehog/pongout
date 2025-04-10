@@ -1,12 +1,25 @@
-# React + Vite
+# Pongout (Croquet JS rewrite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This branch represents the migration of Pongout to the Croquet 2.0 JavaScript framework via Multisynq, enabling real-time deterministic multiplayer sync.
 
-Currently, two official plugins are available:
+## What's working
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react/README.md) uses [Babel](https://babeljs.io/) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+- Basic view and model architecture using Croquet `Session.join`
+- Multiplayer view instantiation works — logs show multiple views connecting
+- Canvas and styling render correctly, no visual errors in the DOM
+- Code structure follows the pattern of the working Multicar example
 
-## Expanding the ESLint configuration
+## What's blocked
 
-If you are developing a production application, we recommend using TypeScript and enable type-aware lint rules. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+- 🐛 Runtime error: `Cannot set property viewId of #<Cd> which has only a getter`
+- Attempts to manually set `this.viewId = ...` fail, because `viewId` is read-only in Croquet.View
+- Fixes such as using `autoSession()` or accessing `this.session.viewId` directly also led to different failures or white screen
+- Multicar and other examples assign `viewId` only within the Model or use it as a key, not override it
+- Likely issue is misunderstanding of how to link `viewId` to input handling without overwriting a Croquet-managed property
+
+## Next Steps
+
+- Review how Multicar and Croquet View patterns avoid `this.viewId` overrides
+- Possibly refactor to treat `viewId` as immutable and work with alternate identifiers
+- May require review from someone with deeper Croquet internals familiarity
+
