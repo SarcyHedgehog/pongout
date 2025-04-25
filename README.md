@@ -1,98 +1,81 @@
-# Pongout 3D (Multisynq + Three.js)
+# 🧱 Pongout 3D - Current Development Status
 
-This project is a multiplayer 3D Pong-style game built using:
-
-- **Multisynq/Croquet** for real-time multiplayer state synchronization.
-- **Three.js** for WebGL-based 3D rendering.
-- **Vite** as the development server and build tool.
+This project is a Croquet-powered, Three.js-rendered 3D Pong + Breakout hybrid game, built using the @multisynq/client library for multiplayer state sync.
 
 ---
 
-## 🚀 What's New
+## ✅ Project Goals
 
-### ✅ Moved to Three.js
-We migrated from the original HTML canvas-based rendering to a 3D setup using **Three.js**. This allows for:
-- Smooth paddle animations
-- Flexible camera control
-- Easy future upgrades: 3D ball, lighting, particles, and effects
-
-### ✅ Multiplayer Synchronization
-Each player controls their own paddle using `mousemove`.
-- Blue paddle (Player 1) appears on the **left**
-- Orange paddle (Player 2) appears on the **right**
-- Paddle positions are synchronized across both views in real-time using Croquet sessions
-- Only the owning player can move their assigned paddle (based on `viewId`)
+- Two-player networked Pong x Breakout mashup
+- Portal 2-inspired blue vs orange aesthetics
+- Paddle sync via Multisynq (formerly Croquet)
+- 3D ball and brick wall interactions
+- Paddle shrinking on missed returns
+- Game ends when opponent’s paddle is breached
 
 ---
 
-## 🔧 Development Setup
+## 🧠 Current State
 
-```bash
-npm install
-npm run dev
+We are encountering a blocking error that prevents the game from initializing properly in the browser:
+
+```
+Error: Model class "PongoutModel" not registered
 ```
 
-Ensure your environment includes:
-- Node.js
-- Working internet connection for loading `three` and `@croquet/croquet` modules
+Despite the following being in place:
+
+- Using `@multisynq/client@1.0.0`
+- No `.register()` calls (per updated usage pattern)
+- Model and view classes defined and passed directly:
+  ```js
+  Session.join({ model: PongoutModel, view: PongoutView })
+  ```
+- Classes are exported:
+  ```js
+  export { PongoutModel, PongoutView }
+  ```
+- Code is housed in a single `main.js` file
+- Project uses Vite (no React plugins)
+- `.vite` cache cleared and reloaded
+- Session opened in incognito tab
 
 ---
 
-## ✅ Working Features
-- Multiplayer session handling
-- Paddle control with mouse
-- Distinct control ownership for each player
-- Live synchronization of paddle movement
-- WebGL-based rendering with colored materials and shadows
+## 🔍 Suspected Causes
+
+1. **Vite bundling behavior** — Multisynq may be trying to dynamically import `PongoutModel` by name and failing to resolve it due to Vite chunking.
+
+2. **Multisynq internal model loader** — the runtime might not be discovering the class correctly in development mode.
+
+3. **Hot Module Reload conflicts** — model might be missing due to race conditions or caching issues during HMR.
 
 ---
 
-## 🧱 Next Steps
-- Add ball logic: bouncing, collisions, reset
-- Add bricks or targets
-- Add scoring and game loop
-- Apply Portal 2-themed colors and polish materials
+## 🧪 Next Steps
+
+- [ ] Have a developer check if `PongoutModel` is correctly resolved in the module registry.
+- [ ] Try disabling HMR entirely in Vite.
+- [ ] Package and run from a static build (`vite build && serve dist`) to avoid dev-time quirks.
+- [ ] Try registering model with an explicit string and see if classic Croquet registration still works as fallback.
 
 ---
 
-## 🎮 Tech Stack
-| Feature         | Library         |
-|----------------|-----------------|
-| Multiplayer     | Multisynq/Croquet |
-| 3D Graphics     | Three.js        |
-| Dev Server      | Vite            |
-| Language        | JavaScript (ES modules)
+## 📦 Repo Links
 
----
+Current project code (main):
+- https://github.com/SarcyHedgehog/pongout
 
-## 🧠 Learnings
-- Croquet automatically assigns `viewId`; don’t try to overwrite it manually.
-- Do not use `Croquet.Constants.set()` — instead, assign constants directly.
-- `viewId` should be used to determine player ownership, but never modified.
-- Use `Croquet.Model.register()` for models but **not** for views.
-
----
-
-## 📂 File Structure
-```bash
-pongout-game/
-├── index.html
-├── pong3d.js        # Main game logic
-├── README.md        # You're reading it
-├── vite.config.js
-├── package.json
-└── node_modules/
-```
-
----
-
-## ✍️ Author
-James Poole & Harper (AI Pair Dev 🤖)
-
----
-
-## 🔗 Related
+Example we’re basing on:
 - https://github.com/multisynq/vibe-coding-multisynq-threejs
-- https://croquet.io
-- https://threejs.org
 
+Vanessa Freudenberg’s template (source of truth):
+- https://github.com/croquet/multicar
+
+---
+
+## 🆘 Blocker Summary
+
+We cannot currently instantiate or join a session using `@multisynq/client` because the model class is “not registered” — despite being defined and passed in correctly. This is likely an ESM or Vite bundling edge case.
+
+---
