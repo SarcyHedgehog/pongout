@@ -1,68 +1,63 @@
 import * as THREE from "three";
 import { Session, Model, View } from "@multisynq/client";
 
-// Model definition
 class PongoutModel extends Model {
   init() {
-    console.log("✅ PongoutModel.init() called");
+    console.log("✅ Model initialized");
     this.players = new Map();
+
+    // Initialize balls
     this.balls = {
-      orange: {
-        x: -8,
-        y: 0,
-        vx: 0.1,
-        vy: 0.1 * (Math.random() < 0.5 ? 1 : -1),
-      },
-      blue: {
-        x: 8,
-        y: 0,
-        vx: -0.1,
-        vy: 0.1 * (Math.random() < 0.5 ? 1 : -1),
-      },
+      orange: { x: -20, y: 0, vx: 0.15, vy: 0.15 },
+      blue: { x: 20, y: 0, vx: -0.15, vy: -0.15 },
     };
+
+    // Initialize paddles
     this.paddles = {
-      orange: { x: -9, y: 0, height: 3 },
-      blue: { x: 9, y: 0, height: 3 },
+      orange: { x: -25, y: 0, height: 6 },
+      blue: { x: 25, y: 0, height: 6 },
     };
+
+    // Start game loop
     this.future(16).step();
   }
 
   step() {
-    Object.entries(this.balls).forEach(([color, ball]) => {
+    // Update ball positions
+    Object.values(this.balls).forEach((ball) => {
       ball.x += ball.vx;
       ball.y += ball.vy;
 
-      if (ball.y > 10 || ball.y < -10) {
+      // Ball-wall collisions
+      if (Math.abs(ball.y) > 12) {
         ball.vy *= -1;
+        ball.y = Math.sign(ball.y) * 12;
       }
 
-      Object.entries(this.paddles).forEach(([paddleColor, paddle]) => {
+      // Ball-paddle collisions
+      Object.entries(this.paddles).forEach(([color, paddle]) => {
         if (this.checkPaddleCollision(ball, paddle)) {
-          ball.vx *= -1.1;
+          console.log(`🏓 ${color} ball hit ${color} paddle`);
+          ball.vx *= -1;
+          ball.x = paddle.x + Math.sign(ball.vx) * 1;
         }
       });
     });
 
+    // Model publishes with its ID
     this.publish(this.id, "gameStateUpdate", {
       balls: this.balls,
       paddles: this.paddles,
     });
+
     this.future(16).step();
   }
 
   checkPaddleCollision(ball, paddle) {
     return (
       Math.abs(ball.x - paddle.x) < 1 &&
-      ball.y >= paddle.y - paddle.height / 2 &&
-      ball.y <= paddle.y + paddle.height / 2
+      Math.abs(ball.y - paddle.y) < paddle.height / 2
     );
-  }
-
-  onViewJoin(viewId) {
-    const isFirstPlayer = this.players.size === 0;
-    const color = isFirstPlayer ? "orange" : "blue";
-    this.players.set(viewId, { color });
-    this.publish(this.id, "playerAssigned", { viewId, color });
   }
 
   movePaddle(viewId, dy) {
@@ -70,127 +65,144 @@ class PongoutModel extends Model {
     if (!player) return;
 
     const paddle = this.paddles[player.color];
-    paddle.y = Math.max(-7, Math.min(7, paddle.y + dy));
+    paddle.y = Math.max(-12, Math.min(12, paddle.y + dy));
+
+    // Model publishes with its ID
+    this.publish(this.id, "gameStateUpdate", {
+      balls: this.balls,
+      paddles: this.paddles,
+    });
+  }
+
+  onViewJoin(viewId) {
+    console.log("👋 View joining:", viewId);
+    const color = this.players.size === 0 ? "orange" : "blue";
+    this.players.set(viewId, { color });
+
+    // Model publishes with its ID
+    this.publish(this.id, "playerAssigned", { viewId, color });
   }
 }
 PongoutModel.register("PongoutModel");
 
-// View definition
 class PongoutView extends View {
   constructor(model) {
     super(model);
-    console.log("✅ PongoutView.constructor() called");
-    this.model = model;
+    this.model = model; // Store model reference
+
+    // Scene setup
     this.scene = new THREE.Scene();
     this.scene.background = new THREE.Color(0x222222);
 
+    // Renderer
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
     this.renderer.setSize(window.innerWidth, window.innerHeight);
-    this.renderer.shadowMap.enabled = true;
     document.body.appendChild(this.renderer.domElement);
 
+    // Camera
     this.camera = new THREE.PerspectiveCamera(
       75,
       window.innerWidth / window.innerHeight,
       0.1,
       1000
     );
-    this.camera.position.set(0, 0, 20);
-    this.camera.lookAt(0, 0, 0);
+    this.camera.position.z = 40;
 
+    // Lights
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     this.scene.add(ambientLight);
 
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+    directionalLight.position.set(0, 10, 10);
+    this.scene.add(directionalLight);
+
+    // Game objects
     this.meshes = {};
     this.playerColor = null;
+    this.createMeshes();
 
-    // Subscribe to events
+    // Controls
+    this.keys = { ArrowUp: false, ArrowDown: false };
+    window.addEventListener("keydown", this.handleKeyDown.bind(this));
+    window.addEventListener("keyup", this.handleKeyUp.bind(this));
+    window.addEventListener("resize", this.handleResize.bind(this));
+
+    // Subscribe with model ID
     this.subscribe(
-      this.model.id,
+      model.id,
       "playerAssigned",
       this.onPlayerAssigned.bind(this)
     );
     this.subscribe(
-      this.model.id,
+      model.id,
       "gameStateUpdate",
       this.updateGameState.bind(this)
     );
 
-    // Add keyboard controls
-    window.addEventListener("keydown", this.handleKeyDown.bind(this));
-    window.addEventListener("resize", this.handleResize.bind(this));
-
-    this.createMeshes();
-    this.updateLoop();
+    // Start rendering
+    this.animate();
+    console.log("✅ View initialized");
   }
 
   createMeshes() {
-    const colors = {
-      orange: 0xff6600,
-      blue: 0x00a5ff,
-    };
+    // Add board first
+    const boardGeo = new THREE.PlaneGeometry(52, 30);
+    const boardMat = new THREE.MeshStandardMaterial({ color: 0x444444 });
+    const board = new THREE.Mesh(boardGeo, boardMat);
+    board.position.z = -1;
+    this.scene.add(board);
 
+    // Create paddles and balls
+    const colors = { orange: 0xff6600, blue: 0x00a5ff };
     Object.entries(colors).forEach(([colorName, colorValue]) => {
       // Ball
-      const ballGeometry = new THREE.SphereGeometry(0.5, 32, 32);
-      const ballMaterial = new THREE.MeshStandardMaterial({
+      const ballGeo = new THREE.SphereGeometry(0.5, 32, 32);
+      const ballMat = new THREE.MeshStandardMaterial({
         color: colorValue,
-        metalness: 0.3,
-        roughness: 0.4,
+        metalness: 0.8,
+        roughness: 0.2,
         emissive: colorValue,
         emissiveIntensity: 0.5,
       });
-      const ballMesh = new THREE.Mesh(ballGeometry, ballMaterial);
-      ballMesh.castShadow = true;
-      this.scene.add(ballMesh);
-      this.meshes[`${colorName}Ball`] = ballMesh;
+      const ball = new THREE.Mesh(ballGeo, ballMat);
+      this.scene.add(ball);
+      this.meshes[`${colorName}Ball`] = ball;
 
       // Paddle
-      const paddleGeometry = new THREE.BoxGeometry(0.5, 3, 0.5);
-      const paddleMaterial = new THREE.MeshStandardMaterial({
+      const paddleGeo = new THREE.BoxGeometry(0.5, 6, 1);
+      const paddleMat = new THREE.MeshStandardMaterial({
         color: colorValue,
-        metalness: 0.7,
-        roughness: 0.3,
+        metalness: 0.9,
+        roughness: 0.1,
         emissive: colorValue,
-        emissiveIntensity: 0.2,
+        emissiveIntensity: 0.3,
       });
-      const paddleMesh = new THREE.Mesh(paddleGeometry, paddleMaterial);
-      paddleMesh.castShadow = true;
-      this.scene.add(paddleMesh);
-      this.meshes[`${colorName}Paddle`] = paddleMesh;
+      const paddle = new THREE.Mesh(paddleGeo, paddleMat);
+      this.scene.add(paddle);
+      this.meshes[`${colorName}Paddle`] = paddle;
     });
   }
 
-  onPlayerAssigned({ viewId, color }) {
-    if (viewId === this.viewId) {
-      this.playerColor = color;
-      console.log(`✅ Assigned as ${color} player`);
-    }
-  }
-
-  updateGameState(state) {
-    Object.entries(state.balls).forEach(([color, ball]) => {
-      const mesh = this.meshes[`${color}Ball`];
-      if (mesh) {
-        mesh.position.set(ball.x, ball.y, 0);
-      }
-    });
-
-    Object.entries(state.paddles).forEach(([color, paddle]) => {
-      const mesh = this.meshes[`${color}Paddle`];
-      if (mesh) {
-        mesh.position.set(paddle.x, paddle.y, 0);
-      }
-    });
+  animate() {
+    requestAnimationFrame(() => this.animate());
+    this.renderer.render(this.scene, this.camera);
   }
 
   handleKeyDown(e) {
-    if (!this.playerColor) return;
+    if (!this.playerColor || !this.model) return;
 
-    if (e.key === "ArrowUp") {
-      this.model.movePaddle(this.viewId, 0.5);
-    } else if (e.key === "ArrowDown") {
-      this.model.movePaddle(this.viewId, -0.5);
+    if (e.key in this.keys && !this.keys[e.key]) {
+      this.keys[e.key] = true;
+      const dy = e.key === "ArrowUp" ? 0.5 : e.key === "ArrowDown" ? -0.5 : 0;
+      if (dy !== 0) {
+        this.model.movePaddle(this.viewId, dy);
+      }
+    }
+  }
+
+  handleKeyUp(e) {
+    if (e.key in this.keys) {
+      this.keys[e.key] = false;
     }
   }
 
@@ -200,32 +212,40 @@ class PongoutView extends View {
     this.renderer.setSize(window.innerWidth, window.innerHeight);
   }
 
-  updateLoop() {
-    requestAnimationFrame(() => this.updateLoop());
-    if (this.renderer && this.scene && this.camera) {
-      this.renderer.render(this.scene, this.camera);
+  onPlayerAssigned(data) {
+    if (data.viewId === this.viewId) {
+      console.log("🎮 Assigned color:", data.color);
+      this.playerColor = data.color;
     }
   }
 
-  detach() {
-    if (this.renderer) {
-      this.renderer.dispose();
-      document.body.removeChild(this.renderer.domElement);
-    }
-    window.removeEventListener("keydown", this.handleKeyDown);
-    window.removeEventListener("resize", this.handleResize);
-    super.detach();
+  updateGameState(state) {
+    Object.entries(state.balls).forEach(([color, ball]) => {
+      const mesh = this.meshes[`${color}Ball`];
+      if (mesh) {
+        mesh.position.x = ball.x;
+        mesh.position.y = ball.y;
+      }
+    });
+
+    Object.entries(state.paddles).forEach(([color, paddle]) => {
+      const mesh = this.meshes[`${color}Paddle`];
+      if (mesh) {
+        mesh.position.x = paddle.x;
+        mesh.position.y = paddle.y;
+      }
+    });
   }
 }
 
-// Session initialization
+// Session setup
 window.addEventListener("DOMContentLoaded", async () => {
-  console.log("✅ DOMContentLoaded event fired");
-
   try {
     const urlParams = new URLSearchParams(window.location.search);
-    const sessionId = urlParams.get("s");
+    const sessionId =
+      urlParams.get("s") || Math.random().toString(36).substring(2);
 
+    console.log("🔄 Joining session...", { sessionId });
     const session = await Session.join({
       apiKey: "2atXt6dTbNaKKO83iB4tsYDfmpusH0C6veTYXjy7Om",
       appId: "com.sarcastichedgehog.pongout3d",
@@ -235,16 +255,14 @@ window.addEventListener("DOMContentLoaded", async () => {
       sessionId: sessionId,
     });
 
-    console.log("🎉 Successfully joined session:", session);
-
-    if (!sessionId) {
-      const newUrl = `${window.location.pathname}?s=${session.id}`;
-      window.history.pushState({ sessionId: session.id }, "", newUrl);
-    }
-
+    console.log("🎉 Session joined:", {
+      id: session.id,
+      modelId: session.model.id,
+    });
     const view = new PongoutView(session.model);
     session.view = view;
+    console.log("🎮 View registered:", { viewId: view.viewId });
   } catch (err) {
-    console.error("❌ Failed to join session", err);
+    console.error("❌ Failed to join session:", err);
   }
 });

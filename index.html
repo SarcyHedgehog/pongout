@@ -1,23 +1,31 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <title>Pongout 3D</title>
-  <style>
-    html, body {
-      margin: 0;
-      padding: 0;
-      width: 100%;
-      height: 100%;
-      overflow: hidden;
-      background: #222;
-    }
-    canvas {
-      display: block;
-    }
-  </style>
+    <meta charset="UTF-8" />
+    <title>Pongout 3D</title>
+    <style>
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background: #222;
+        }
+        canvas {
+            display: block;
+        }
+    </style>
 </head>
 <body>
-  <script type="module" src="./main.js"></script>
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.159.0/build/three.module.js",
+            "@multisynq/client": "/node_modules/@multisynq/client/dist/index.js"
+        }
+    }
+    </script>
+    <script type="module" src="./main.js"></script>
 </body>
 </html>
