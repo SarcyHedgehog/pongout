@@ -23,8 +23,8 @@ class PongoutModel extends Model {
     };
 
     this.paddles = {
-      orange: { x: -32, y: 0, height: 6 },
-      blue: { x: 32, y: 0, height: 6 },
+      orange: { x: -32, y: 0, height: 6, velocity: 0 },
+      blue: { x: 32, y: 0, height: 6, velocity: 0 },
     };
 
     this.future(16).step();
@@ -35,13 +35,11 @@ class PongoutModel extends Model {
       ball.x += ball.vx;
       ball.y += ball.vy;
 
-      // Larger boundary for y-axis
       if (Math.abs(ball.y) > 18) {
         ball.vy *= -1;
         ball.y = Math.sign(ball.y) * 18;
       }
 
-      // Add x-axis boundary check
       if (Math.abs(ball.x) > 34) {
         ball.vx *= -1;
         ball.x = Math.sign(ball.x) * 34;
@@ -52,6 +50,7 @@ class PongoutModel extends Model {
           console.log(`🏓 ${color} ball hit ${paddleColor} paddle`);
           ball.vx *= -1;
           ball.x = paddle.x + Math.sign(ball.vx) * 1;
+          ball.vy += paddle.velocity * 0.5;
         }
       });
     });
@@ -71,41 +70,131 @@ class PongoutModel extends Model {
     );
   }
 
+  movePaddle(viewId, dy) {
+    const player = this.players.get(viewId);
+    if (!player) {
+      console.warn("⚠️ No player found:", viewId, "- Possible causes:", {
+        totalPlayers: this.players.size,
+        activePlayers: Array.from(this.players.keys()),
+        requestingViewId: viewId,
+      });
+      return;
+    }
+
+    const paddle = this.paddles[player.color];
+    if (!paddle) {
+      console.error("❌ Invalid paddle color:", player.color);
+      return;
+    }
+
+    const prevY = paddle.y;
+    paddle.y = Math.max(-18, Math.min(18, paddle.y + dy));
+    paddle.velocity = paddle.y - prevY;
+
+    console.log("🎮 Moving paddle:", {
+      color: player.color,
+      y: paddle.y,
+      velocity: paddle.velocity,
+      viewId: viewId,
+    });
+
+    this.publish(this.id, "gameStateUpdate", {
+      balls: this.balls,
+      paddles: this.paddles,
+    });
+  }
+
   onViewJoin(viewId) {
     console.log("👋 View joining:", viewId);
+    // Assign player color
     const color = this.players.size === 0 ? "orange" : "blue";
-    this.players.set(viewId, { color });
 
+    // Store player data
+    this.players.set(viewId, { color });
+    console.log("🎮 Player assigned:", {
+      viewId,
+      color,
+      totalPlayers: this.players.size,
+    });
+
+    // Start game loop if not already running
     if (!this.gameStarted) {
       this.gameStarted = true;
       this.future(16).step();
     }
 
-    this.publish(this.id, "playerAssigned", { viewId, color });
+    // Send player assignment FIRST
+    this.publish(this.id, "playerAssigned", {
+      viewId,
+      color,
+    });
+
+    // THEN send initial game state
     this.publish(this.id, "gameStateUpdate", {
       balls: this.balls,
       paddles: this.paddles,
     });
-  }
 
-  movePaddle(viewId, dy) {
-    const player = this.players.get(viewId);
-    if (!player) {
-      console.warn("⚠️ No player for viewId:", viewId);
-      return;
-    }
-
-    const paddle = this.paddles[player.color];
-    paddle.y = Math.max(-18, Math.min(18, paddle.y + dy));
-
-    this.publish(this.id, "gameStateUpdate", {
-      balls: this.balls,
+    console.log("🎲 Initial state sent:", {
       paddles: this.paddles,
+      viewId,
+      color,
     });
   }
 }
 
 PongoutModel.register("PongoutModel");
+
+class InputController {
+  constructor(view) {
+    this.view = view;
+    this.model = view.model;
+    this.viewId = view.viewId;
+    this.active = false;
+    this.keys = { ArrowUp: false, ArrowDown: false };
+
+    window.addEventListener("keydown", this.handleKeyDown.bind(this));
+    window.addEventListener("keyup", this.handleKeyUp.bind(this));
+
+    this.update();
+    console.log("🎮 Input controller created for:", this.viewId);
+  }
+
+  activate() {
+    this.active = true;
+    console.log("🎮 Input controller activated for player:", this.viewId);
+  }
+
+  handleKeyDown(e) {
+    if (e.key in this.keys && !this.keys[e.key]) {
+      this.keys[e.key] = true;
+      e.preventDefault();
+      console.log("⌨️ Key down:", e.key);
+    }
+  }
+
+  handleKeyUp(e) {
+    if (e.key in this.keys) {
+      this.keys[e.key] = false;
+      e.preventDefault();
+      console.log("⌨️ Key up:", e.key);
+    }
+  }
+
+  update() {
+    if (this.model && this.viewId && this.active) {
+      if (this.keys.ArrowUp) {
+        console.log("⬆️ Moving paddle up");
+        this.model.movePaddle(this.viewId, 0.5);
+      }
+      if (this.keys.ArrowDown) {
+        console.log("⬇️ Moving paddle down");
+        this.model.movePaddle(this.viewId, -0.5);
+      }
+    }
+    requestAnimationFrame(() => this.update());
+  }
+}
 
 class PongoutView extends View {
   constructor(model) {
@@ -125,7 +214,7 @@ class PongoutView extends View {
       0.1,
       1000
     );
-    this.camera.position.z = 50; // Moved back to see larger play area
+    this.camera.position.z = 50;
 
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
     this.scene.add(ambientLight);
@@ -138,11 +227,9 @@ class PongoutView extends View {
     this.playerColor = null;
     this.createMeshes();
 
-    this.keys = { ArrowUp: false, ArrowDown: false };
-    window.addEventListener("keydown", this.handleKeyDown.bind(this));
-    window.addEventListener("keyup", this.handleKeyUp.bind(this));
-    window.addEventListener("resize", this.handleResize.bind(this));
+    this.input = new InputController(this);
 
+    window.addEventListener("resize", this.handleResize.bind(this));
     this.subscribe(
       model.id,
       "playerAssigned",
@@ -159,7 +246,6 @@ class PongoutView extends View {
   }
 
   createMeshes() {
-    // Larger board
     const boardGeo = new THREE.PlaneGeometry(70, 40);
     const boardMat = new THREE.MeshStandardMaterial({
       color: 0x444444,
@@ -173,7 +259,6 @@ class PongoutView extends View {
     const colors = { orange: 0xff6600, blue: 0x00a5ff };
 
     Object.entries(colors).forEach(([colorName, colorValue]) => {
-      // Ball
       const ballGeo = new THREE.SphereGeometry(0.5, 32, 32);
       const ballMat = new THREE.MeshStandardMaterial({
         color: colorValue,
@@ -186,7 +271,6 @@ class PongoutView extends View {
       this.scene.add(ball);
       this.meshes[`${colorName}Ball`] = ball;
 
-      // Paddle
       const paddleGeo = new THREE.BoxGeometry(0.5, 6, 1);
       const paddleMat = new THREE.MeshStandardMaterial({
         color: colorValue,
@@ -206,25 +290,6 @@ class PongoutView extends View {
     this.renderer.render(this.scene, this.camera);
   }
 
-  handleKeyDown(e) {
-    if (!this.playerColor || !this.model) return;
-
-    if (e.key in this.keys && !this.keys[e.key]) {
-      this.keys[e.key] = true;
-      const dy = e.key === "ArrowUp" ? 0.5 : e.key === "ArrowDown" ? -0.5 : 0;
-      if (dy !== 0) {
-        console.log("🎮 Key pressed:", { key: e.key, dy });
-        this.model.movePaddle(this.viewId, dy);
-      }
-    }
-  }
-
-  handleKeyUp(e) {
-    if (e.key in this.keys) {
-      this.keys[e.key] = false;
-    }
-  }
-
   handleResize() {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
@@ -235,6 +300,7 @@ class PongoutView extends View {
     if (data.viewId === this.viewId) {
       console.log("🎮 Assigned color:", data.color);
       this.playerColor = data.color;
+      this.input.activate();
     }
   }
 
@@ -252,6 +318,14 @@ class PongoutView extends View {
       if (mesh) {
         mesh.position.x = paddle.x;
         mesh.position.y = paddle.y;
+
+        // Flash paddle when it moves
+        if (color === this.playerColor && paddle.velocity !== 0) {
+          mesh.material.emissiveIntensity = 0.8;
+          setTimeout(() => {
+            mesh.material.emissiveIntensity = 0.3;
+          }, 100);
+        }
       }
     });
   }
